@@ -1,0 +1,30 @@
+%SQL
+CREATE OR REPLACE FUNCTION get_entire_version_history (search_device STRING)
+RETURNS TABLE(
+  device_id STRING,
+  production_version STRING,
+  release_version STRING,
+  first_seen TIMESTAMP,
+  days_diff INTEGER)
+COMMENT 'Returns entire version history for the given device'
+LANGUAGE SQL
+    RETURN
+    WITH cte AS (
+    SELECT 
+      t1.device_id, 
+      t1.production_version, 
+      t2.release_version,
+      t1.first_seen
+    FROM {catalog}.{schema}.version_history_table t1
+    LEFT JOIN {catalog}.{schema}.release_versions_map_table t2
+    ON t1.production_version = t2.production_version
+    WHERE t1.device_id = search_device
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY t1.device_id, t1.production_version ORDER BY t1.first_seen ASC) = 1
+    )
+    SELECT
+    cte.*,
+    COALESCE(DATEDIFF(cast(first_seen as date), LAG(cast(first_seen as date)) OVER (PARTITION BY device_id ORDER BY cast(first_seen as date))), 0) AS days_diff
+    FROM cte
+
+
+-- PROMPT: Retrieve entire version history for '1234567890' search device
